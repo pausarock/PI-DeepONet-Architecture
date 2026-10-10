@@ -72,8 +72,17 @@ class PIDeepONet(nn.Module):
         v = v * self.speed_scale + 1e-6
         return q, v, q / v
 
-    def predict_parameters(self, u: torch.Tensor, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def predict_parameters(
+        self,
+        u: torch.Tensor,
+        x: torch.Tensor,
+        component: str = "current",
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Return piecewise `(v_f, k_c, capacity)` at locations `x`.
+
+        `component`:
+          - `"current"` — P_prev + bounded increment (default)
+          - `"prev"` — base estimate P_prev used by the temporal-consistency loss
 
         Parameter bounds must be provided through `road_segments` by the user.
         Default bounds below are generic placeholders, not calibrated values.
@@ -82,7 +91,10 @@ class PIDeepONet(nn.Module):
         n_seg = len(self.road_segments)
         prev = torch.sigmoid(raw[:, : 3 * n_seg])
         delta = torch.tanh(raw[:, 3 * n_seg :])
-        base = torch.sigmoid((prev + 0.1 * delta - 0.5) * 10.0)
+        if component == "prev":
+            base = prev
+        else:
+            base = torch.sigmoid((prev + 0.1 * delta - 0.5) * 10.0)
 
         v_f = torch.zeros_like(x.reshape(-1))
         k_c = torch.zeros_like(v_f)
