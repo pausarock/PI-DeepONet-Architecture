@@ -55,17 +55,6 @@ for t = 1 … N_iter:
 
 Loss weights \(\alpha_1,\alpha_2,\lambda_v,\lambda_q,\lambda_p\) and the update intervals are **user-supplied**. Defaults in this repo are unit placeholders, not experimental values.
 
-## What is hidden
-
-- Site-specific detector coordinates, ramp locations, and lane maps
-- Dataset files and preprocessing pipelines
-- Trained weights
-- Normalization statistics from real data
-- Calibrated learning-rate schedules and experimental hyperparameters
-- Evaluation and visualization scripts
-
-Road geometry and ramp zones must be provided by the caller through `road_segments` and `ramp_zones`.
-
 ## Quick start
 
 ```bash
