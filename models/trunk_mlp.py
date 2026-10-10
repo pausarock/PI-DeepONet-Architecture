@@ -1,4 +1,4 @@
-"""Trunk MLP that evaluates the operator at a query coordinate (x, t)."""
+"""Attention-enhanced trunk with a nonlinear expansion of (x, t)."""
 
 from __future__ import annotations
 
@@ -11,10 +11,12 @@ import torch.nn as nn
 class TrunkMLP(nn.Module):
     """Map a query point to a trunk feature vector.
 
-    The 2-D coordinate `(x, t)` is first expanded by elementary nonlinear
-    features, then passed through an MLP. Layer widths are placeholders.
-    Spatial/temporal scaling should be supplied by the caller; no site length
-    is hard-coded here.
+    The 2-D coordinate `(x, t)` is expanded to eight elementary nonlinear
+    features, then passed through an FCN with hidden-layer attention
+    (U/V gates), following the extended PI-DeepONet trunk.
+
+    Layer widths are placeholders. Spatial/temporal scaling is supplied by
+    the caller; no corridor length is hard-coded.
     """
 
     def __init__(
@@ -23,13 +25,16 @@ class TrunkMLP(nn.Module):
         trunk_dim: int = 32,
     ) -> None:
         super().__init__()
-        dims = [8, *hidden_dims, trunk_dim]
-        layers = []
-        for i in range(len(dims) - 1):
-            layers.append(nn.Linear(dims[i], dims[i + 1]))
-            if i < len(dims) - 2:
-                layers.append(nn.Tanh())
-        self.net = nn.Sequential(*layers)
+        in_dim = 8
+        hidden = list(hidden_dims)
+        self.gate_u = nn.Linear(in_dim, hidden[0])
+        self.gate_v = nn.Linear(in_dim, hidden[0])
+        self.input_proj = nn.Linear(in_dim, hidden[0])
+        self.hidden = nn.ModuleList(
+            [nn.Linear(hidden[i], hidden[i + 1]) for i in range(len(hidden) - 1)]
+        )
+        self.head = nn.Linear(hidden[-1], trunk_dim)
+        self.act = nn.Tanh()
 
     @staticmethod
     def expand_features(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
@@ -41,4 +46,11 @@ class TrunkMLP(nn.Module):
         )
 
     def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        return self.net(self.expand_features(x, t))
+        z0 = self.expand_features(x, t)
+        attn_u = self.act(self.gate_u(z0))
+        attn_v = self.act(self.gate_v(z0))
+        hidden = self.act(self.input_proj(z0))
+        for layer in self.hidden:
+            z = self.act(layer(hidden))
+            hidden = (1.0 - z) * attn_u + z * attn_v
+        return self.head(hidden)
